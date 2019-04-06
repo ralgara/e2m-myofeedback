@@ -6,7 +6,6 @@ docker rm -f jupyter
 
 docker run --name jupyter -d \
   -p 8888:8888 \
-  --device=/dev/cu.usbmodem14401 \
   -v $PWD:/home/jovyan/work \
   jupyter/tensorflow-notebook
 
