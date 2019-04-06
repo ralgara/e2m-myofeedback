@@ -2,12 +2,18 @@
 
 echo "Starting Jupyter container"
 
+docker rm -f jupyter
+
 docker run --name jupyter -d \
   -p 8888:8888 \
+  --device=/dev/cu.usbmodem14401 \
   -v $PWD:/home/jovyan/work \
   jupyter/tensorflow-notebook
 
 sleep 3
+
+echo "Installing pyserial"
+docker exec -it jupyter bash -c 'pip install pyserial'
 
 echo "Go to http://localhost:8888"
 echo "Provide the token shown below to log into Jupyter":
