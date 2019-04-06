@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+echo "Starting Jupyter container"
+
+docker run --name jupyter -d \
+  -p 8888:8888 \
+  -v $PWD:/home/jovyan/work \
+  jupyter/tensorflow-notebook
+
+sleep 3
+
+echo "Go to http://localhost:8888"
+echo "Provide the token shown below to log into Jupyter":
+docker logs jupyter 2>&1 | awk '/  http/ {print}'
