@@ -10,21 +10,15 @@ Protoype code to run a wearable assistive tech for physical therapy. Contains:
 
 Currently the sampler just writes to stdout, intended for file redirection and subsequent signal analysis on the capture file.
 
-`./arduino-sampler.py > /tmp/myo`
-
-With, e.g.:
-
-```$ tail -f /tmp/myo
-
-334
-327
-320
-...
+```
+E2MWEAR_ARDUINO_DEV=/dev/cu.usbmodem14101
+E2MWEAR_ARDUINO_BAUD=57600
+DATA_FILE=jupyter/data/myo.$(date +%Y%m%d%H%M%S)
+./arduino-sampler.py | tee $DATA_FILE
 ```
 
-Still working in a real-time data interface to Jupyter. Containers seem to require privileged mode to access host devices for USB Arduino interface.
+Redirecting to `jupyter/data/*` ensures data file is available in the Jupyter container for analysis through Docker volume
 
-  
 # Signal processing in Jupyter
 
 Start on a Docker container:
@@ -33,7 +27,9 @@ Start on a Docker container:
 ./start-jupyter
 ```
 
-Jupyter will be at http://localhost:8888. First use requires a token, which is shown in the startup logs. 
- `docker ps`
+The Jupyter notebook for signal processing is at: 
+http://localhost:8888/notebooks/work/jupyter/myo-sigproc.ipynb
+
+NOTE: Jupyter will be at http://localhost:8888. First use requires a token, which is shown in the container logs: `docker logs jupyter`
  
  
