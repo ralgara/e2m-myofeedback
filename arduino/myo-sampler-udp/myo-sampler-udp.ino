@@ -1,10 +1,10 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUDP.h>
+// Configure WiFi credentials:
+#include "WiFiCredentials.h"
 
 WiFiUDP Udp;
 
-const char* ssid = "****";
-const char* password = "****";
 const char* target_host = "10.12.15.149";
 int target_port = 33000;
 
@@ -12,6 +12,10 @@ int sensorPin = A0;
 int sensorValue = 0;
 int sample_rate_hz = 100;
 int sample_delay_ms = 1000 / sample_rate_hz;
+
+#define SEND_UDP    0
+#define SEND_SERIAL 1
+#define HAPTIC_BLINK !SEND_SERIAL
 
 /* Filter generator:
     https://www-users.cs.york.ac.uk/~fisher/cgi-bin/mkfscript
@@ -37,9 +41,8 @@ int sample_delay_ms = 1000 / sample_rate_hz;
 #define GAIN   1.112983215e+06
 
 static float xv[NZEROS + 1], yv[NPOLES + 1];
-static float filter(float value)
-
-{ xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3]; xv[3] = xv[4];
+static float filter(float value) {
+  xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3]; xv[3] = xv[4];
   xv[4] = value / GAIN;
   yv[0] = yv[1]; yv[1] = yv[2]; yv[2] = yv[3]; yv[3] = yv[4];
   yv[4] =   (xv[0] + xv[4]) + 4 * (xv[1] + xv[3]) + 6 * xv[2]
@@ -49,31 +52,54 @@ static float filter(float value)
 }
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+#if SEND_SERIAL
   Serial.begin(115200);
   Serial.println();
   Serial.printf("Connecting to %s ", ssid);
+#endif
+#if SEND_UDP
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
-    Serial.print(".");
   }
-  Serial.printf("Connected. Starting sampler with f=%d", sample_rate_hz);
+#endif
+  Serial.printf("Starting sampler with f=%d", sample_rate_hz);
 }
 
-void send_data(int value) {
+void send_data_udp(int value) {
   Udp.beginPacket(target_host, target_port);
   Udp.write((value & 0xff00) >> 8);
   Udp.write(value & 0xff);
   Udp.endPacket();
 }
 
+void send_data_serial(int raw, int filtered, int feedback) {
+  Serial.printf("%d %d %d\n", raw, filtered, feedback);
+}
+
+#define HAPTIC_THRESHOLD 100
+#define HAPTIC_SCALE 1024
+short feedback(short input) {
+  if (input > HAPTIC_THRESHOLD)
+    return HAPTIC_SCALE;
+  else
+    return 0;
+}
+
 void loop() {
   sensorValue = analogRead(sensorPin);
-  Serial.print(sensorValue);
-  Serial.print("\t");
-  short output = filter(sensorValue);
-  Serial.println(output);
-  send_data(sensorValue);
+  short filtered = filter(sensorValue);
+  short haptic = feedback(filtered);
+#if HAPTIC_BLINK
+  digitalWrite(LED_BUILTIN, haptic);
+#endif
+#if SEND_UDP
+  send_data_udp(sensorValue);
+#endif
+#if SEND_SERIAL
+  send_data_serial(sensorValue, filtered, haptic);
+#endif
   delay(sample_delay_ms);
 }
