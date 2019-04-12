@@ -40,8 +40,8 @@ int sample_delay_ms = 1000 / sample_rate_hz;
 #define NPOLES 4
 #define GAIN   1.112983215e+06
 
-static float xv[NZEROS + 1], yv[NPOLES + 1];
-static float filter(float value) {
+float xv[NZEROS + 1], yv[NPOLES + 1];
+float filter(float value) {
   xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3]; xv[3] = xv[4];
   xv[4] = value / GAIN;
   yv[0] = yv[1]; yv[1] = yv[2]; yv[2] = yv[3]; yv[3] = yv[4];
@@ -49,6 +49,26 @@ static float filter(float value) {
             + ( -0.8485559993 * yv[0]) + (  3.5335352195 * yv[1])
             + ( -5.5208191366 * yv[2]) + (  3.8358255406 * yv[3]);
   return yv[4];
+}
+
+#define HAPTIC_THRESHOLD 100
+#define HAPTIC_SCALE 1024
+short feedback(short input) {
+  if (input > HAPTIC_THRESHOLD)
+    return HAPTIC_SCALE;
+  else
+    return 0;
+}
+
+void send_data_udp(int value) {
+  Udp.beginPacket(target_host, target_port);
+  Udp.write((value & 0xff00) >> 8);
+  Udp.write(value & 0xff);
+  Udp.endPacket();
+}
+
+void send_data_serial(int raw, int filtered, int feedback) {
+  Serial.printf("%d %d %d\n", raw, filtered, feedback);
 }
 
 void setup() {
@@ -68,29 +88,10 @@ void setup() {
   Serial.printf("Starting sampler with f=%d", sample_rate_hz);
 }
 
-void send_data_udp(int value) {
-  Udp.beginPacket(target_host, target_port);
-  Udp.write((value & 0xff00) >> 8);
-  Udp.write(value & 0xff);
-  Udp.endPacket();
-}
-
-void send_data_serial(int raw, int filtered, int feedback) {
-  Serial.printf("%d %d %d\n", raw, filtered, feedback);
-}
-
-#define HAPTIC_THRESHOLD 100
-#define HAPTIC_SCALE 1024
-short feedback(short input) {
-  if (input > HAPTIC_THRESHOLD)
-    return HAPTIC_SCALE;
-  else
-    return 0;
-}
-
 void loop() {
   sensorValue = analogRead(sensorPin);
   short filtered = filter(sensorValue);
+  
   short haptic = feedback(filtered);
 #if HAPTIC_BLINK
   digitalWrite(LED_BUILTIN, haptic);
