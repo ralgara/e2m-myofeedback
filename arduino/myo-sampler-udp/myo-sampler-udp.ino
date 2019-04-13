@@ -13,46 +13,58 @@ int sensorValue = 0;
 int sample_rate_hz = 100;
 int sample_delay_ms = 1000 / sample_rate_hz;
 
-#define SEND_UDP    0
+#define HAPTIC_THRESHOLD 300
+#define HAPTIC_SCALE 1024
+
+#define SEND_UDP    1
 #define SEND_SERIAL 1
 #define HAPTIC_BLINK !SEND_SERIAL
 
 /* Filter generator:
     https://www-users.cs.york.ac.uk/~fisher/cgi-bin/mkfscript
+  filtertype   =   Butterworth
+  passtype  =   Lowpass
+  ripple  =
+  order   =   3
+  samplerate  =   100
+  corner1   =   1
+  corner2   =
+  adzero  =
+  logmin  =
 
-    filtertype   =   Butterworth
-    passtype  =   Lowpass
-    ripple  =
-    order   =   4
-    samplerate  =   100
-    corner1   =   1
-
-    raw alpha1    =   0.0100000000
-    raw alpha2    =   0.0100000000
-    warped alpha1 =   0.0100032912
-    warped alpha2 =   0.0100032912
-    gain at dc    :   mag = 1.112983215e+06   phase =  -0.0000000000 pi
-    gain at centre:   mag = 7.869979788e+05   phase =  -1.0000000000 pi
-    gain at hf    :   mag = 0.000000000e+00
+  Command line: /www/usr/fisher/helpers/mkfilter -Bu -Lp -o 3 -a 1.0000000000e-02 0.0000000000e+00
+  raw alpha1    =   0.0100000000
+  raw alpha2    =   0.0100000000
+  warped alpha1 =   0.0100032912
+  warped alpha2 =   0.0100032912
+  gain at dc    :   mag = 3.430944333e+04   phase =  -0.0000000000 pi
+  gain at centre:   mag = 2.426044003e+04   phase =  -0.7500000000 pi
+  gain at hf    :   mag = 0.000000000e+00
 */
 
-#define NZEROS 4
-#define NPOLES 4
-#define GAIN   1.112983215e+06
+#define NZEROS 3
+#define NPOLES 3
+#define GAIN   3.430944333e+04
 
-float xv[NZEROS + 1], yv[NPOLES + 1];
 float filter(float value) {
-  xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3]; xv[3] = xv[4];
-  xv[4] = value / GAIN;
-  yv[0] = yv[1]; yv[1] = yv[2]; yv[2] = yv[3]; yv[3] = yv[4];
-  yv[4] =   (xv[0] + xv[4]) + 4 * (xv[1] + xv[3]) + 6 * xv[2]
-            + ( -0.8485559993 * yv[0]) + (  3.5335352195 * yv[1])
-            + ( -5.5208191366 * yv[2]) + (  3.8358255406 * yv[3]);
-  return yv[4];
+  static float xv[NZEROS + 1];
+  static float yv[NPOLES + 1];
+  xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3];
+  xv[3] = value / GAIN;
+  yv[0] = yv[1]; yv[1] = yv[2]; yv[2] = yv[3];
+  yv[3] =   (xv[0] + xv[3]) + 3 * (xv[1] + xv[2])
+            + (  0.8818931306 * yv[0]) + ( -2.7564831952 * yv[1])
+            + (  2.8743568927 * yv[2]);
+  return yv[3];
 }
 
-#define HAPTIC_THRESHOLD 100
-#define HAPTIC_SCALE 1024
+float derivative(float value) {
+  static float xv;
+  float xd = value - xv;
+  xv = value;
+  return xd * sample_rate_hz;
+}
+
 short feedback(short input) {
   if (input > HAPTIC_THRESHOLD)
     return HAPTIC_SCALE;
@@ -67,8 +79,14 @@ void send_data_udp(int value) {
   Udp.endPacket();
 }
 
-void send_data_serial(int raw, int filtered, int feedback) {
-  Serial.printf("%d %d %d\n", raw, filtered, feedback);
+void send_data_serial(
+  short raw,
+  short filtered,
+  short feedback) {
+  Serial.printf("%d %d %d\n",
+                raw,
+                filtered,
+                feedback);
 }
 
 void setup() {
@@ -91,7 +109,7 @@ void setup() {
 void loop() {
   sensorValue = analogRead(sensorPin);
   short filtered = filter(sensorValue);
-  
+  short d1 = derivative(filtered);
   short haptic = feedback(filtered);
 #if HAPTIC_BLINK
   digitalWrite(LED_BUILTIN, haptic);
